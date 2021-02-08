@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:os="http://www.mulesoft.org/schema/mule/os" xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	xmlns:db="http://www.mulesoft.org/schema/mule/db"
+	xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/db http://www.mulesoft.org/schema/mule/db/current/mule-db.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+http://www.mulesoft.org/schema/mule/os http://www.mulesoft.org/schema/mule/os/current/mule-os.xsd">
+	<db:config name="Database_Config" doc:name="Database Config" doc:id="8b4276da-4492-4acd-a59b-fdcbb1e84063" >
+		<db:my-sql-connection host="localhost" port="3307" user="root" database="3112batch" />
+	</db:config>
+	<os:object-store name="Object_store" doc:name="Object store" doc:id="e9934766-9770-475a-97eb-1453fc388fff" />
+	<flow name="pankajdemo02Flow" doc:id="ac02f40e-f8eb-4c51-bcaa-175ef898b682" initialState="stopped">
+		<db:listener table="myguests" doc:name="On Table Row" doc:id="dbf78c08-511f-44b3-929d-df46da352bfa" config-ref="Database_Config" watermarkColumn="id">
+			<scheduling-strategy >
+				<fixed-frequency frequency="10000"/>
+			</scheduling-strategy>
+		</db:listener>
+		<ee:transform doc:name="Transform Message" doc:id="07cc40f7-cfbf-4e44-9e7b-48578d6003f4" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+payload]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<logger level="INFO" doc:name="Logger" doc:id="a4a26f9a-e96a-45f8-a982-85f689d3cd87" message="#[payload]"/>
+	</flow>
+	<flow name="ManulWaterMarking" doc:id="80985d41-32e5-458e-9bcc-c946432f882d" >
+		<scheduler doc:name="Scheduler" doc:id="84a890af-8770-4931-965e-ba69dcec8bcb" >
+			<scheduling-strategy >
+				<fixed-frequency frequency="10000"/>
+			</scheduling-strategy>
+		</scheduler>
+		<os:retrieve doc:name="Retrieve" doc:id="e550fd7f-08dc-424f-b3a8-7e380d61a8f7" key="key1" objectStore="Object_store" target="watermark">
+			<os:default-value ><![CDATA[0]]></os:default-value>
+		</os:retrieve>
+		<logger level="INFO" doc:name="Logger" doc:id="8cf06c95-65b9-4480-b586-2d169035bee3" message="fetching record after id : #[vars.watermark]"/>
+		<db:select doc:name="Select" doc:id="0da9fb78-942e-4fcd-926c-680cb6fa8538" config-ref="Database_Config">
+			<db:sql ><![CDATA[select * from myguests where id > :watermarkvalue]]></db:sql>
+			<db:input-parameters ><![CDATA[#[{
+	watermarkvalue : vars.watermark
+}]]]></db:input-parameters>
+		</db:select>
+		<logger level="INFO" doc:name="Logger" doc:id="23815977-b2aa-4619-a83f-8c0cda73cd40" message="#[%dw 2.0
+output application/json
+---
+payload]"/>
+		<os:store doc:name="Store" doc:id="81c131ad-0f78-4694-aa47-e9ebf1cd2ebe" key="key1" failOnNullValue="false" objectStore="Object_store">
+			<os:value ><![CDATA[#[max(payload map $.id)]]]></os:value>
+		</os:store>
+	</flow>
+</mule>
